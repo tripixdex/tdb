@@ -197,9 +197,41 @@ def tables(db: Path = typer.Option(DEFAULT_DB, "--db"), as_json: bool = typer.Op
 
 
 @app.command()
-def describe(table: str = typer.Option("data", "--table"), db: Path = typer.Option(DEFAULT_DB, "--db")):
+def describe(
+    table: str = typer.Option("data", "--table"),
+    db: Path = typer.Option(DEFAULT_DB, "--db"),
+    as_json: bool = typer.Option(False, "--json"),
+):
     con = _connect(db)
     df = con.execute(f'DESCRIBE "{table}"').df()
+    con.close()
+
+    if as_json:
+        records = [{k: _json_safe(v) for k, v in row.items()} for row in df.to_dict(orient="records")]
+        print(json.dumps(records, ensure_ascii=False))
+        return
+
+    tbl = Table(title=f"Schema: {table}")
+    for c in df.columns:
+        tbl.add_column(str(c))
+    for _, row in df.iterrows():
+        tbl.add_row(*[str(x) for x in row.tolist()])
+    console.print(tbl)
+"').df()
+    con.close()
+
+    if as_json:
+        records = [{k: _json_safe(v) for k, v in row.items()} for row in df.to_dict(orient="records")]
+        print(json.dumps(records, ensure_ascii=False))
+        return
+
+    tbl = Table(title=f"Schema: {table}")
+    for c in df.columns:
+        tbl.add_column(str(c))
+    for _, row in df.iterrows():
+        tbl.add_row(*[str(x) for x in row.tolist()])
+    console.print(tbl)
+"').df()
     con.close()
 
     tbl = Table(title=f"Schema: {table}")
