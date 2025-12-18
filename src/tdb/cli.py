@@ -36,42 +36,53 @@ def _qident(name: str) -> str:
     return '"' + name.replace('"', '""') + '"'
 
 
-def _csv_opts_sql(delim: str, header: str, sample: int) -> str:
-    opts = [f"sample_size={int(sample)}"]
-    if delim != "auto":
-        opts.append(f"delim='{delim}'")
-    if header != "auto":
-        opts.append(f"header={header.lower()}")
-    return ", ".join(opts)
+def _csv_opts_sql(sample: int) -> str:
+    return f"sample_size={int(sample)}"
 
 
-def _pk_metrics_sql(table: str, cols: list[str]) -> str:
+def _pk_metrics(con: duckdb.DuckDBPyConnection, table: str, cols: list[str]) -> dict:
     t = _qident(table)
     cols_q = [_qident(c) for c in cols]
+
     distinct_expr = (
-        f"COUNT(DISTINCT ({', '.join(cols_q)})) AS distinct_n"
+        f"COUNT(DISTINCT ({', '.join(cols_q)}))"
         if len(cols_q) > 1
-        else f"COUNT(DISTINCT {cols_q[0]}) AS distinct_n"
+        else f"COUNT(DISTINCT {cols_q[0]})"
     )
+
     null_cond = " OR ".join([f"{c} IS NULL" for c in cols_q])
-    return f"""
+
+    q = f"""
     SELECT
       COUNT(*) AS n,
-      {distinct_expr},
+      {distinct_expr} AS distinct_n,
       SUM({null_cond}) AS null_n,
-      COUNT(*) - {distinct_expr.replace(" AS distinct_n", "")} AS dup_n
+      COUNT(*) - {distinct_expr} AS dup_n
     FROM {t};
     """
+    n, distinct_n, null_n, dup_n = con.execute(q).fetchone()
+    return {
+        "table": table,
+        "pk": cols,
+        "n": int(n),
+        "distinct": int(distinct_n),
+        "null": int(null_n),
+        "dup": int(dup_n),
+    }
 
 
-def _fk_orphans_sql(src_table: str, src_cols: list[str], ref_table: str, ref_cols: list[str], label: str) -> str:
+def _fk_orphans(con: duckdb.DuckDBPyConnection, src_table: str, src_cols: list[str], ref_table: str, ref_cols: list[str]) -> dict:
     s = _qident(src_table)
     r = _qident(ref_table)
     s_cols = [_qident(c) for c in src_cols]
     r_cols = [_qident(c) for c in ref_cols]
     on = " AND ".join([f"r.{rc} = s.{sc}" for sc, rc in zip(s_cols, r_cols)])
-    where = f"r.{r_cols[0]} IS NULL"
-    return f"SELECT COUNT(*) AS {_qident(label)} FROM {s} s LEFT JOIN {r} r ON {on} WHERE {where};"
+    q = f"SELECT COUNT(*) FROM {s} s LEFT JOIN {r} r ON {on} WHERE r.{r_cols[0]} IS NULL;"
+    n = con.execute(q).fetchone()[0]
+    return {
+        "fk": f'{src_table}({",".join(src_cols)}) -> {ref_table}({",".join(ref_cols)})',
+        "orphans": int(n),
+    }
 
 
 @dataclass
@@ -81,7 +92,6 @@ class Col:
 
 
 def _table_cols(con: duckdb.DuckDBPyConnection, table: str) -> list[Col]:
-    # PRAGMA table_info('t') returns: cid, name, type, notnull, dflt_value, pk
     rows = con.execute(f"PRAGMA table_info({_qident(table)})").fetchall()
     return [Col(name=r[1], typ=r[2]) for r in rows]
 
@@ -98,7 +108,6 @@ def _toposort_tables(profile: dict) -> list[str]:
     while remaining:
         ready = sorted([t for t in remaining if deps[t].issubset(set(ordered))])
         if not ready:
-            # cycle or missing table in profile
             ordered.extend(sorted(list(remaining)))
             break
         ordered.extend(ready)
@@ -118,13 +127,11 @@ def import_csv(
     csv: Path = typer.Argument(..., exists=True, dir_okay=False),
     table: str = typer.Option("data", "--table"),
     db: Path = typer.Option(DEFAULT_DB, "--db"),
-    delim: str = typer.Option("auto", "--delim"),
-    header: str = typer.Option("auto", "--header"),
     sample: int = typer.Option(20480, "--sample"),
     as_json: bool = typer.Option(False, "--json"),
 ):
     con = _connect(db)
-    opts = _csv_opts_sql(delim, header, sample)
+    opts = _csv_opts_sql(sample)
 
     t0 = time.perf_counter()
     con.execute(f'DROP TABLE IF EXISTS "{table}"')
@@ -139,7 +146,15 @@ def import_csv(
     con.close()
 
     db_size = db.stat().st_size if db.exists() else 0
-    payload = {"db": str(db), "table": table, "csv": str(csv), "rows": int(rows), "seconds": float(dt), "db_bytes": int(db_size)}
+    payload = {
+        "db": str(db),
+        "table": table,
+        "csv": str(csv),
+        "rows": int(rows),
+        "seconds": float(dt),
+        "rows_per_sec": float(rows / dt) if dt > 0 else None,
+        "db_bytes": int(db_size),
+    }
 
     if as_json:
         print(json.dumps(payload, ensure_ascii=False))
@@ -148,17 +163,6 @@ def import_csv(
     console.print(f"✅ Imported [bold]{rows}[/bold] rows into [bold]{table}[/bold]")
     console.print(f"⏱  {dt:.3f}s  |  {rows/dt:,.0f} rows/sec")
     console.print(f"💾 DB file: {_fmt_bytes(db_size)}  ({db})")
-
-
-@app.command("import-folder")
-def import_folder(
-    folder: Path = typer.Argument(..., exists=True, file_okay=False),
-    db: Path = typer.Option(DEFAULT_DB, "--db"),
-):
-    files = sorted(folder.glob("*.csv"))
-    for f in files:
-        t = f.stem
-        import_csv.callback(csv=f, table=t, db=db, delim="auto", header="auto", sample=20480, as_json=False)  # type: ignore
 
 
 @app.command()
@@ -193,6 +197,29 @@ def describe(table: str = typer.Option("data", "--table"), db: Path = typer.Opti
 
 
 @app.command()
+def head(
+    table: str = typer.Option("data", "--table"),
+    n: int = typer.Option(50, "-n"),
+    db: Path = typer.Option(DEFAULT_DB, "--db"),
+    as_json: bool = typer.Option(False, "--json"),
+):
+    con = _connect(db)
+    df = con.execute(f'SELECT * FROM "{table}" LIMIT {int(n)}').df()
+    con.close()
+
+    if as_json:
+        print(json.dumps(df.to_dict(orient="records"), ensure_ascii=False))
+        return
+
+    rich_table = Table(title=f"{table} (first {n})", show_lines=False)
+    for col in df.columns:
+        rich_table.add_column(str(col), overflow="fold")
+    for _, row in df.iterrows():
+        rich_table.add_row(*[("" if v is None else str(v)) for v in row.tolist()])
+    console.print(rich_table)
+
+
+@app.command()
 def sql(query: str = typer.Argument(...), db: Path = typer.Option(DEFAULT_DB, "--db"), as_json: bool = typer.Option(False, "--json")):
     con = _connect(db)
     t0 = time.perf_counter()
@@ -215,9 +242,30 @@ def sql(query: str = typer.Argument(...), db: Path = typer.Option(DEFAULT_DB, "-
 
 
 @app.command()
-def validate(db: Path = typer.Option(DEFAULT_DB, "--db"), profile: Path = typer.Option(DEFAULT_PROFILE, "--profile")):
+def validate(
+    db: Path = typer.Option(DEFAULT_DB, "--db"),
+    profile: Path = typer.Option(DEFAULT_PROFILE, "--profile"),
+    as_json: bool = typer.Option(False, "--json"),
+):
     prof = json.load(open(profile, "r", encoding="utf-8"))
     con = _connect(db)
+
+    pk_rows: list[dict] = []
+    fk_rows: list[dict] = []
+
+    for tname, spec in prof["tables"].items():
+        pk = spec.get("pk", [])
+        if pk:
+            pk_rows.append(_pk_metrics(con, tname, pk))
+        for fk in spec.get("fks", []):
+            fk_rows.append(_fk_orphans(con, tname, fk["cols"], fk["ref_table"], fk["ref_cols"]))
+
+    con.close()
+    db_size = db.stat().st_size if db.exists() else 0
+
+    if as_json:
+        print(json.dumps({"db": str(db), "db_bytes": int(db_size), "pk": pk_rows, "fk": fk_rows}, ensure_ascii=False))
+        return
 
     pk_tbl = Table(title="PK checks")
     pk_tbl.add_column("table")
@@ -226,25 +274,15 @@ def validate(db: Path = typer.Option(DEFAULT_DB, "--db"), profile: Path = typer.
     pk_tbl.add_column("distinct", justify="right")
     pk_tbl.add_column("null", justify="right")
     pk_tbl.add_column("dup", justify="right")
+    for r in pk_rows:
+        pk_tbl.add_row(r["table"], ",".join(r["pk"]), str(r["n"]), str(r["distinct"]), str(r["null"]), str(r["dup"]))
 
     fk_tbl = Table(title="FK orphan checks")
     fk_tbl.add_column("fk")
     fk_tbl.add_column("orphans", justify="right")
+    for r in fk_rows:
+        fk_tbl.add_row(r["fk"].replace("->", "→"), str(r["orphans"]))
 
-    for tname, spec in prof["tables"].items():
-        pk = spec.get("pk", [])
-        if pk:
-            n, distinct_n, null_n, dup_n = con.execute(_pk_metrics_sql(tname, pk)).fetchone()
-            pk_tbl.add_row(tname, ",".join(pk), str(n), str(distinct_n), str(null_n), str(dup_n))
-
-        for i, fk in enumerate(spec.get("fks", []), start=1):
-            label = f"{tname}.fk{i}"
-            q = _fk_orphans_sql(tname, fk["cols"], fk["ref_table"], fk["ref_cols"], label)
-            orphans = con.execute(q).fetchone()[0]
-            fk_tbl.add_row(f'{tname}({",".join(fk["cols"])}) → {fk["ref_table"]}({",".join(fk["ref_cols"])})', str(orphans))
-
-    con.close()
-    db_size = db.stat().st_size if db.exists() else 0
     console.print(pk_tbl)
     console.print(fk_tbl)
     console.print(f"💾 DB file: {_fmt_bytes(db_size)}  ({db})")
@@ -255,6 +293,8 @@ def build(
     folder: Path = typer.Argument(..., exists=True, file_okay=False),
     db: Path = typer.Option(Path("build/school.duckdb"), "--db"),
     profile: Path = typer.Option(DEFAULT_PROFILE, "--profile"),
+    sample: int = typer.Option(20480, "--sample"),
+    as_json: bool = typer.Option(False, "--json"),
 ):
     prof = json.load(open(profile, "r", encoding="utf-8"))
     order = _toposort_tables(prof)
@@ -264,12 +304,9 @@ def build(
 
     con = _connect(db)
 
-    metrics = Table(title="Build metrics")
-    metrics.add_column("table")
-    metrics.add_column("rows", justify="right")
-    metrics.add_column("seconds", justify="right")
+    metrics_rows: list[dict] = []
 
-    # 1) staging import (dialect autodetect)
+    # staging import
     for t in order:
         csv_path = folder / f"{t}.csv"
         stg = f"stg_{t}"
@@ -279,14 +316,14 @@ def build(
         con.execute(
             f"""
             CREATE TABLE "{stg}" AS
-            SELECT * FROM read_csv('{csv_path.as_posix()}', sample_size=20480)
+            SELECT * FROM read_csv('{csv_path.as_posix()}', sample_size={int(sample)})
             """
         )
         dt = time.perf_counter() - t0
         rows = con.execute(f'SELECT COUNT(*) FROM "{stg}"').fetchone()[0]
-        metrics.add_row(f"stg_{t}", str(rows), f"{dt:.3f}")
+        metrics_rows.append({"table": stg, "rows": int(rows), "seconds": float(dt)})
 
-    # 2) constrained tables + load
+    # constrained tables + load
     for t in order:
         stg = f"stg_{t}"
         cols = _table_cols(con, stg)
@@ -322,9 +359,20 @@ def build(
         con.execute(f'DROP TABLE "{stg}"')
         dt = time.perf_counter() - t0
         rows = con.execute(f'SELECT COUNT(*) FROM "{t}"').fetchone()[0]
-        metrics.add_row(t, str(rows), f"{dt:.3f}")
+        metrics_rows.append({"table": t, "rows": int(rows), "seconds": float(dt)})
 
     con.close()
     db_size = db.stat().st_size if db.exists() else 0
-    console.print(metrics)
+
+    if as_json:
+        print(json.dumps({"db": str(db), "db_bytes": int(db_size), "metrics": metrics_rows}, ensure_ascii=False))
+        return
+
+    tbl = Table(title="Build metrics")
+    tbl.add_column("table")
+    tbl.add_column("rows", justify="right")
+    tbl.add_column("seconds", justify="right")
+    for r in metrics_rows:
+        tbl.add_row(r["table"], str(r["rows"]), f'{r["seconds"]:.3f}')
+    console.print(tbl)
     console.print(f"💾 DB file: {_fmt_bytes(db_size)}  ({db})")

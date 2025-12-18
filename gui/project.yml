@@ -1,0 +1,17 @@
+name: TDBGUI
+options:
+  bundleIdPrefix: com.tripixdex
+
+settings:
+  base:
+    GENERATE_INFOPLIST_FILE: YES
+    PRODUCT_BUNDLE_IDENTIFIER: com.tripixdex.TDBGUI
+    CODE_SIGN_STYLE: Automatic
+
+targets:
+  TDBGUI:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: TDBGUI/Sources
