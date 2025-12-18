@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import json
 import time
+from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
-from dataclasses import dataclass
 from pathlib import Path
 
 import duckdb
+import pandas as pd
 import typer
 from rich.console import Console
 from rich.table import Table
@@ -34,6 +35,9 @@ def _fmt_bytes(n: int) -> str:
     return f"{n} B"
 
 
+def _qident(name: str) -> str:
+    return '"' + name.replace('"', '""') + '"'
+
 
 def _json_safe(v):
     if v is None:
@@ -46,12 +50,39 @@ def _json_safe(v):
         return float(v)
     return str(v)
 
-def _qident(name: str) -> str:
-    return '"' + name.replace('"', '""') + '"'
-
 
 def _csv_opts_sql(sample: int) -> str:
     return f"sample_size={int(sample)}"
+
+
+@dataclass
+class Col:
+    name: str
+    typ: str
+
+
+def _table_cols(con: duckdb.DuckDBPyConnection, table: str) -> list[Col]:
+    rows = con.execute(f"PRAGMA table_info({_qident(table)})").fetchall()
+    return [Col(name=r[1], typ=r[2]) for r in rows]
+
+
+def _toposort_tables(profile: dict) -> list[str]:
+    tables = list(profile["tables"].keys())
+    deps: dict[str, set[str]] = {t: set() for t in tables}
+    for t, spec in profile["tables"].items():
+        for fk in spec.get("fks", []):
+            deps[t].add(fk["ref_table"])
+
+    ordered: list[str] = []
+    remaining = set(tables)
+    while remaining:
+        ready = sorted([t for t in remaining if deps[t].issubset(set(ordered))])
+        if not ready:
+            ordered.extend(sorted(list(remaining)))
+            break
+        ordered.extend(ready)
+        remaining -= set(ready)
+    return ordered
 
 
 def _pk_metrics(con: duckdb.DuckDBPyConnection, table: str, cols: list[str]) -> dict:
@@ -97,36 +128,6 @@ def _fk_orphans(con: duckdb.DuckDBPyConnection, src_table: str, src_cols: list[s
         "fk": f'{src_table}({",".join(src_cols)}) -> {ref_table}({",".join(ref_cols)})',
         "orphans": int(n),
     }
-
-
-@dataclass
-class Col:
-    name: str
-    typ: str
-
-
-def _table_cols(con: duckdb.DuckDBPyConnection, table: str) -> list[Col]:
-    rows = con.execute(f"PRAGMA table_info({_qident(table)})").fetchall()
-    return [Col(name=r[1], typ=r[2]) for r in rows]
-
-
-def _toposort_tables(profile: dict) -> list[str]:
-    tables = list(profile["tables"].keys())
-    deps: dict[str, set[str]] = {t: set() for t in tables}
-    for t, spec in profile["tables"].items():
-        for fk in spec.get("fks", []):
-            deps[t].add(fk["ref_table"])
-
-    ordered: list[str] = []
-    remaining = set(tables)
-    while remaining:
-        ready = sorted([t for t in remaining if deps[t].issubset(set(ordered))])
-        if not ready:
-            ordered.extend(sorted(list(remaining)))
-            break
-        ordered.extend(ready)
-        remaining -= set(ready)
-    return ordered
 
 
 @app.command()
@@ -210,29 +211,6 @@ def describe(
         records = [{k: _json_safe(v) for k, v in row.items()} for row in df.to_dict(orient="records")]
         print(json.dumps(records, ensure_ascii=False))
         return
-
-    tbl = Table(title=f"Schema: {table}")
-    for c in df.columns:
-        tbl.add_column(str(c))
-    for _, row in df.iterrows():
-        tbl.add_row(*[str(x) for x in row.tolist()])
-    console.print(tbl)
-"').df()
-    con.close()
-
-    if as_json:
-        records = [{k: _json_safe(v) for k, v in row.items()} for row in df.to_dict(orient="records")]
-        print(json.dumps(records, ensure_ascii=False))
-        return
-
-    tbl = Table(title=f"Schema: {table}")
-    for c in df.columns:
-        tbl.add_column(str(c))
-    for _, row in df.iterrows():
-        tbl.add_row(*[str(x) for x in row.tolist()])
-    console.print(tbl)
-"').df()
-    con.close()
 
     tbl = Table(title=f"Schema: {table}")
     for c in df.columns:
@@ -351,7 +329,6 @@ def build(
     db.unlink(missing_ok=True)
 
     con = _connect(db)
-
     metrics_rows: list[dict] = []
 
     # staging import
