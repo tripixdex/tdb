@@ -1,0 +1,25 @@
+{
+  "tables": {
+    "customer": { "pk": ["customer_id"] },
+    "employees": { "pk": ["employee_id"] },
+    "product":   { "pk": ["товар_id"] },
+    "warehouses":{ "pk": ["склад_id"] },
+
+    "orders": {
+      "pk": ["order_id"],
+      "fks": [
+        { "cols": ["customer_id"], "ref_table": "customer", "ref_cols": ["customer_id"] },
+        { "cols": ["product_id"],  "ref_table": "product",  "ref_cols": ["товар_id"] }
+      ]
+    },
+
+    "deliveries": {
+      "pk": ["заказ_id"],
+      "fks": [
+        { "cols": ["заказ_id"],     "ref_table": "orders",     "ref_cols": ["order_id"] },
+        { "cols": ["склад_id"],     "ref_table": "warehouses", "ref_cols": ["склад_id"] },
+        { "cols": ["сотрудник_id"], "ref_table": "employees",  "ref_cols": ["employee_id"] }
+      ]
+    }
+  }
+}

@@ -1,9 +1,0 @@
-pyproject.toml
-src/tdb/__init__.py
-src/tdb/cli.py
-src/tdb.egg-info/PKG-INFO
-src/tdb.egg-info/SOURCES.txt
-src/tdb.egg-info/dependency_links.txt
-src/tdb.egg-info/entry_points.txt
-src/tdb.egg-info/requires.txt
-src/tdb.egg-info/top_level.txt
