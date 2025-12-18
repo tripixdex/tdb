@@ -1,0 +1,9 @@
+Metadata-Version: 2.4
+Name: tdb
+Version: 0.1.0
+Requires-Python: >=3.10
+Requires-Dist: duckdb>=1.0.0
+Requires-Dist: typer>=0.12
+Requires-Dist: rich>=13.0
+Requires-Dist: pandas>=2.0
+Requires-Dist: pyarrow>=14.0
