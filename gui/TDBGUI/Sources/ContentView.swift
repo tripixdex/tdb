@@ -52,12 +52,15 @@ final class AppVM: ObservableObject {
     func loadPreview(_ table: String) async {
         do {
             let r = try runner()
-            let args = ["head", "--table", table, "-n", "50"] + (try dbPathArg()) + ["--json"]
+            let query = "SELECT * FROM \"\(table)\" LIMIT 50;"
+            let args = ["sql", query] + (try dbPathArg()) + ["--json"]
             let any = try await r.runJSON(args)
-            let arr = (any as? [[String: Any]]) ?? []
-            let cols = (arr.first.map { Array($0.keys) } ?? []).sorted()
+            let dict = (any as? [String: Any]) ?? [:]
+            let cols = (dict["columns"] as? [String]) ?? []
+            let rowsAny = (dict["rows"] as? [[Any]]) ?? []
+
             previewColumns = cols
-            previewRows = arr.map { row in cols.map { String(describing: row[$0] ?? "") } }
+            previewRows = rowsAny.map { $0.map { String(describing: $0) } }
             status = "preview: \(table) (\(previewRows.count) rows)"
         } catch {
             status = "\(error)"
