@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import time
+from datetime import date, datetime
+from decimal import Decimal
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -31,6 +33,18 @@ def _fmt_bytes(n: int) -> str:
         x /= 1024
     return f"{n} B"
 
+
+
+def _json_safe(v):
+    if v is None:
+        return None
+    if isinstance(v, (str, int, float, bool)):
+        return v
+    if isinstance(v, (date, datetime)):
+        return v.isoformat()
+    if isinstance(v, Decimal):
+        return float(v)
+    return str(v)
 
 def _qident(name: str) -> str:
     return '"' + name.replace('"', '""') + '"'
@@ -208,7 +222,8 @@ def head(
     con.close()
 
     if as_json:
-        print(json.dumps(df.to_dict(orient="records"), ensure_ascii=False))
+        records = [{k: _json_safe(v) for k, v in row.items()} for row in df.to_dict(orient="records")]
+        print(json.dumps(records, ensure_ascii=False))
         return
 
     rich_table = Table(title=f"{table} (first {n})", show_lines=False)
@@ -230,7 +245,8 @@ def sql(query: str = typer.Argument(...), db: Path = typer.Option(DEFAULT_DB, "-
     con.close()
 
     if as_json:
-        print(json.dumps({"ms": dt * 1000.0, "columns": cols, "rows": rows}, ensure_ascii=False))
+        rows_safe = [[_json_safe(v) for v in r] for r in rows]
+        print(json.dumps({"ms": dt * 1000.0, "columns": cols, "rows": rows_safe}, ensure_ascii=False))
         return
 
     tbl = Table(title=f"SQL ({dt*1000:.1f} ms)")
