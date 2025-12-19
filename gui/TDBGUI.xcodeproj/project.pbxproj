@@ -8,16 +8,24 @@
 
 /* Begin PBXBuildFile section */
 		0CA4C367B0F9BC764B570716 /* TDBGUIApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 091F095BA71744B2419FBC1E /* TDBGUIApp.swift */; };
+		3A02EE843EDACF7039CFDB62 /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1720F15424DCC12D05A68D7 /* DesignSystem.swift */; };
 		4BF4C7E7CBE98DE293E9ACB7 /* DataGrid.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04241934A37F7E432ADD43C6 /* DataGrid.swift */; };
 		566518F2AFF035A83738483A /* TdbRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC79829F1DF56CF95104D240 /* TdbRunner.swift */; };
+		5F250EFE7A0BFD5B4805A9C4 /* Effects.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88EC33996849DE39665809AC /* Effects.swift */; };
+		7B6C4A6EB4CB0B4C8FF15253 /* Sidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72E7A29DFD04CA65C498A5CE /* Sidebar.swift */; };
 		7B7045F3EE9FDEDC0DB1573C /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E26A97C9FA34DD05DDE5DA2 /* ContentView.swift */; };
+		B72BA292620B021762DB149F /* Chrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBCE569A7D4EC99D90176598 /* Chrome.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		04241934A37F7E432ADD43C6 /* DataGrid.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataGrid.swift; sourceTree = "<group>"; };
 		091F095BA71744B2419FBC1E /* TDBGUIApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TDBGUIApp.swift; sourceTree = "<group>"; };
 		0E26A97C9FA34DD05DDE5DA2 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		72E7A29DFD04CA65C498A5CE /* Sidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sidebar.swift; sourceTree = "<group>"; };
+		88EC33996849DE39665809AC /* Effects.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Effects.swift; sourceTree = "<group>"; };
+		B1720F15424DCC12D05A68D7 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
 		BA2CCBD2F562F41D61EF7E2F /* TDBGUI.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TDBGUI.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		BBCE569A7D4EC99D90176598 /* Chrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Chrome.swift; sourceTree = "<group>"; };
 		FC79829F1DF56CF95104D240 /* TdbRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TdbRunner.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -41,8 +49,12 @@
 		EA491D2F810F2829C5949935 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				BBCE569A7D4EC99D90176598 /* Chrome.swift */,
 				0E26A97C9FA34DD05DDE5DA2 /* ContentView.swift */,
 				04241934A37F7E432ADD43C6 /* DataGrid.swift */,
+				B1720F15424DCC12D05A68D7 /* DesignSystem.swift */,
+				88EC33996849DE39665809AC /* Effects.swift */,
+				72E7A29DFD04CA65C498A5CE /* Sidebar.swift */,
 				091F095BA71744B2419FBC1E /* TDBGUIApp.swift */,
 				FC79829F1DF56CF95104D240 /* TdbRunner.swift */,
 			);
@@ -108,8 +120,12 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B72BA292620B021762DB149F /* Chrome.swift in Sources */,
 				7B7045F3EE9FDEDC0DB1573C /* ContentView.swift in Sources */,
 				4BF4C7E7CBE98DE293E9ACB7 /* DataGrid.swift in Sources */,
+				3A02EE843EDACF7039CFDB62 /* DesignSystem.swift in Sources */,
+				5F250EFE7A0BFD5B4805A9C4 /* Effects.swift in Sources */,
+				7B6C4A6EB4CB0B4C8FF15253 /* Sidebar.swift in Sources */,
 				0CA4C367B0F9BC764B570716 /* TDBGUIApp.swift in Sources */,
 				566518F2AFF035A83738483A /* TdbRunner.swift in Sources */,
 			);
